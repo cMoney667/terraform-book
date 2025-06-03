@@ -1,3 +1,11 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "5.81.0"
+    }
+  }
+}
 locals {
   http_port = 80
   any_port = 0
@@ -12,7 +20,7 @@ resource "aws_launch_template" "example" {
   instance_type = var.instance_type
   vpc_security_group_ids = [aws_security_group.instance.id]
 
-  user_data = base64encode(templatefile("user-data.sh", {
+  user_data = base64encode(templatefile("${path.module}/user-data.sh", {
     server_port = var.server_port,
     db_address = data.terraform_remote_state.db.outputs.address,
     db_port = data.terraform_remote_state.db.outputs.port
@@ -113,19 +121,22 @@ resource "aws_security_group" "instance" {
 
 resource "aws_security_group" "alb" {
   name = "${var.cluster_name}-alb"
-  ingress {
-    from_port = local.http_port
-    to_port = local.http_port
-    protocol = local.tcp_protocol
-    cidr_blocks = local.all_ips
-  }
+}
 
-  egress {
-    from_port = local.any_port
-    to_port = local.any_port
-    protocol = local.any_protocol
-    cidr_blocks = local.all_ips
-  }
+resource "aws_security_group_rule" "allow_http_inbound" {
+  from_port         = local.http_port
+  protocol          = local.tcp_protocol
+  security_group_id = aws_security_group.alb.id
+  to_port           = local.http_port
+  type              = "ingress"
+}
+
+resource "aws_security_group_rule" "allow_all_outbound" {
+  from_port         = local.any_port
+  protocol          = local.any_protocol
+  security_group_id = aws_security_group.alb.id
+  to_port           = local.any_port
+  type              = "egress"
 }
 
 
